@@ -1,4 +1,4 @@
-const CLAUDE_API_KEY = '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';
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
 const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 
 module.exports = async function (context, req) {
