@@ -465,9 +465,9 @@
 
 <script>
   // === Configuration ===
-  const MCP_URL = 'https://func-mcp-sqlru5tmlangw.azurewebsites.net/mcp';
-  const MCP_KEY = 'CQnxKXJAsdiSDaXpoJHbf7Jvb0B7Outo18O7XD3rq7eKAzFu1cjB3A==';
-  const CLAUDE_API_KEY = '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';
+  const MCP_URL = '/api/mcp';
+  const MCP_KEY = '';
+  const CLAUDE_API_KEY = '';
   const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 
   // === Auth: show user info if available (Azure Static Web Apps) ===
@@ -647,17 +647,10 @@ When answering:
     chatHistory.push({ role: 'user', content: userMsgContent });
 
     try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      const resp = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': CLAUDE_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: CLAUDE_MODEL,
-          max_tokens: 2048,
           system: systemPrompt,
           messages: chatHistory.slice(-10)
         })
