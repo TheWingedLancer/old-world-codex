@@ -2,14 +2,11 @@ module.exports = async function (context, req) {
   const CLAUDE_API_KEY = process.env['CLAUDE_API_KEY'];
   const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 
-  context.log('CLAUDE_API_KEY present:', !!CLAUDE_API_KEY);
-  context.log('Env keys:', Object.keys(process.env).filter(k => k.includes('CLAUDE')));
-
   if (!CLAUDE_API_KEY) {
     context.res = {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'CLAUDE_API_KEY environment variable not set' })
+      body: JSON.stringify({ error: 'CLAUDE_API_KEY not configured' })
     };
     return;
   }
