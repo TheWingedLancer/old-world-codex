@@ -604,7 +604,7 @@
   // === Chat ===
   let chatHistory = [];
 
-  async function sendChat() {
+async function sendChat() {
     const input = document.getElementById('chatInput');
     const query = input.value.trim();
     if (!query) return;
@@ -617,20 +617,74 @@
 
     addChatMsg('system', '🔍 Searching the knowledge base...');
 
-    let context = '';
-    try {
-      const searchData = await mcpToolCall('search_knowledge_base', { query, max_results: 5 });
-      if (searchData.results) {
-        context = searchData.results.map(r =>
-          `[Source: ${r.document}, Page ${r.page}]\n${r.text}`
-        ).join('\n\n---\n\n');
-      }
-    } catch(e) {
-      console.error('Search failed:', e);
+    // Generate multiple search queries for broader coverage
+    let searchQueries = [query];
+
+    // Extract key terms and create variations
+    const words = query.toLowerCase().split(/\s+/);
+    if (words.length > 3 || query.match(/comprehensive|all|every|complete|full|combine|multiple|across/i)) {
+      // Broad question — do multiple targeted searches
+      try {
+        const planResp = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system: 'You are a search query planner. Given a user question about WFRP4e (Warhammer Fantasy Roleplay 4th Edition), generate 3-5 different search queries that would find relevant information across multiple source books. Return ONLY a JSON array of query strings, nothing else. Example: ["timeline Empire history", "chronology IC dates events", "historical events Reikland"]',
+            messages: [{ role: 'user', content: query }]
+          })
+        });
+        if (planResp.ok) {
+          const planData = await planResp.json();
+          const planText = planData.content?.[0]?.text || '';
+          try {
+            const queries = JSON.parse(planText);
+            if (Array.isArray(queries) && queries.length > 0) {
+              searchQueries = queries.slice(0, 5);
+            }
+          } catch(e) { /* use original query */ }
+        }
+      } catch(e) { /* use original query */ }
     }
 
+    // Execute all searches
+    let allResults = [];
+    let searchCount = 0;
+    for (const sq of searchQueries) {
+      try {
+        const searchData = await mcpToolCall('search_knowledge_base', { query: sq, max_results: 10 });
+        if (searchData.results) {
+          for (const r of searchData.results) {
+            // Deduplicate by document + page
+            const key = r.document + ':' + r.page;
+            if (!allResults.find(x => x.document + ':' + x.page === key)) {
+              allResults.push(r);
+            }
+          }
+        }
+        searchCount++;
+      } catch(e) {
+        console.error('Search failed for:', sq, e);
+      }
+    }
+
+    // Sort by relevance and cap at 20
+    allResults.sort((a, b) => b.score - a.score);
+    allResults = allResults.slice(0, 20);
+
     removeLastSystemMsg();
-    addChatMsg('system', '🤔 Thinking...');
+
+    if (searchQueries.length > 1) {
+      addChatMsg('system', `🔍 Ran ${searchCount} searches, found ${allResults.length} unique passages. Thinking...`);
+    } else {
+      addChatMsg('system', `🔍 Found ${allResults.length} passages. Thinking...`);
+    }
+
+    let context = '';
+    if (allResults.length > 0) {
+      context = allResults.map(r =>
+        `[Source: ${r.document}, Page ${r.page}]\n${r.text}`
+      ).join('\n\n---\n\n');
+    }
 
     const systemPrompt = `You are the Old World Codex, an expert assistant for Warhammer Fantasy Roleplay 4th Edition (WFRP4e). You answer questions about rules, lore, careers, spells, creatures, items, and game mechanics using the provided source material.
 
@@ -638,7 +692,8 @@ When answering:
 - Cite specific documents and page numbers when possible
 - Be precise about game mechanics (skill tests, modifiers, SL thresholds)
 - If the source material doesn't cover the question, say so clearly
-- Keep answers focused and practical for GMs and players at the table`;
+- Keep answers focused and practical for GMs and players at the table
+- When asked to compile or combine information from multiple sources, organize it clearly and note which source each piece comes from`;
 
     const userMsgContent = context
       ? `Here is relevant source material from the WFRP4e library:\n\n${context}\n\n---\n\nUser question: ${query}`

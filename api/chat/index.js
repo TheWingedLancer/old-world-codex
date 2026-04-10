@@ -23,7 +23,7 @@ module.exports = async function (context, req) {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 2048,
+        max_tokens: 4096,
         system: system,
         messages: messages
       })
