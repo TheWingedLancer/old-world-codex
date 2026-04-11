@@ -629,7 +629,7 @@ async function sendChat() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            system: 'You are a search query planner. Given a user question about WFRP4e (Warhammer Fantasy Roleplay 4th Edition), generate 3-5 different search queries that would find relevant information across multiple source books. Return ONLY a JSON array of query strings, nothing else. Example: ["timeline Empire history", "chronology IC dates events", "historical events Reikland"]',
+            system: 'You are a search query planner for a WFRP4e knowledge base. Given a user question, generate 3-5 targeted search queries. For timeline/history questions, include queries with specific date ranges and era names (e.g. "500 IC founding", "1111 Black Plague", "2302 Great War Chaos"). For rules questions, include the mechanic name and related terms. Return ONLY a JSON array of query strings, nothing else.',,
             messages: [{ role: 'user', content: query }]
           })
         });
@@ -695,7 +695,8 @@ When answering:
 - Keep answers focused and practical for GMs and players at the table
 - When asked to compile or combine information from multiple sources, organize it clearly and note which source each piece comes from
 - IMPORTANT: You have access to search results from the knowledge base provided below. Work with what is provided — do not claim you cannot see the content. If the provided excerpts are insufficient for a comprehensive answer, summarize what you CAN see and suggest the user ask more specific follow-up questions to fill in gaps (e.g. "Ask me about the Ubersreik timeline" or "Ask about events in Altdorf between 1000-2000 IC").
-- When given timeline or chronological data from multiple sources, merge and organize it by date even if the sources overlap.`;
+- When given timeline or chronological data from multiple sources, merge and organize it by date even if the sources overlap.
+- When compiling timelines, the search results contain actual dated entries (e.g. "82 IC", "1111 IC"). Organize these chronologically and include all dates found in the source material. Do not skip entries just because they seem minor.`;
 
     const userMsgContent = context
       ? `Here is relevant source material from the WFRP4e library:\n\n${context}\n\n---\n\nUser question: ${query}`
