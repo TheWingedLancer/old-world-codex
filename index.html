@@ -629,7 +629,7 @@ async function sendChat() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            system: 'You are a search query planner for a WFRP4e knowledge base. Given a user question, generate 3-5 targeted search queries. For timeline/history questions, include queries with specific date ranges and era names (e.g. "500 IC founding", "1111 Black Plague", "2302 Great War Chaos"). For rules questions, include the mechanic name and related terms. Return ONLY a JSON array of query strings, nothing else.',,
+            system: 'You are a search query planner for a WFRP4e knowledge base. Given a user question, generate 3-5 targeted search queries. For timeline/history questions, include queries with specific date ranges and era names (e.g. "500 IC founding", "1111 Black Plague", "2302 Great War Chaos"). For rules questions, include the mechanic name and related terms. Return ONLY a JSON array of query strings, nothing else.',
             messages: [{ role: 'user', content: query }]
           })
         });
