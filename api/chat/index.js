@@ -12,7 +12,19 @@ module.exports = async function (context, req) {
   }
 
   try {
-    const { messages, system } = req.body;
+    const { messages, system, tools, max_tokens } = req.body;
+
+    const payload = {
+      model: CLAUDE_MODEL,
+      max_tokens: max_tokens || 4096,
+      system: system,
+      messages: messages
+    };
+
+    // If tools were provided, pass them through to Claude
+    if (tools && Array.isArray(tools) && tools.length > 0) {
+      payload.tools = tools;
+    }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -21,12 +33,7 @@ module.exports = async function (context, req) {
         'x-api-key': CLAUDE_API_KEY,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: 8192,
-        system: system,
-        messages: messages
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();

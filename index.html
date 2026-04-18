@@ -307,6 +307,25 @@
     padding: 0.5rem;
   }
 
+  .chat-msg.tool {
+    align-self: flex-start;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--gold-dim);
+    background: rgba(200, 164, 50, 0.04);
+    border: 1px solid rgba(200, 164, 50, 0.2);
+    border-radius: 4px;
+    padding: 0.5rem 0.9rem;
+    max-width: 90%;
+    opacity: 0.85;
+  }
+
+  .chat-msg.tool .tool-label {
+    color: var(--gold);
+    font-weight: 600;
+    margin-right: 0.5rem;
+  }
+
   .chat-input-row {
     display: flex;
     gap: 0;
@@ -422,9 +441,9 @@
 </div>
 
 <div class="mode-tabs">
-  <button class="mode-tab active" onclick="switchMode('search')">Search</button>
-  <button class="mode-tab" onclick="switchMode('chat')">Ask the Codex</button>
-  <button class="mode-tab" onclick="switchMode('docs')">Library</button>
+  <button class="mode-tab active" onclick="switchMode('search', event)">Search</button>
+  <button class="mode-tab" onclick="switchMode('chat', event)">Ask the Codex</button>
+  <button class="mode-tab" onclick="switchMode('docs', event)">Library</button>
 </div>
 
 <div class="main">
@@ -444,7 +463,7 @@
   <div id="panel-chat" class="panel">
     <div class="chat-container">
       <div class="chat-messages" id="chatMessages">
-        <div class="chat-msg system">Ask anything about WFRP4e rules, lore, careers, spells, creatures, and more. The Codex will search the library and answer from the source material.</div>
+        <div class="chat-msg system">Ask anything about WFRP4e rules, lore, careers, spells, creatures, and more. The Codex will search the library as needed and answer from the source material.</div>
       </div>
       <div class="chat-input-row">
         <textarea class="chat-input" id="chatInput" rows="1"
@@ -467,10 +486,8 @@
   // === Configuration ===
   const MCP_URL = '/api/mcp';
   const MCP_KEY = '';
-  const CLAUDE_API_KEY = '';
-  const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 
-  // === Auth: show user info if available (Azure Static Web Apps) ===
+  // === Auth: show user info if available ===
   async function loadUserInfo() {
     try {
       const resp = await fetch('/.auth/me');
@@ -488,43 +505,22 @@
   let sessionId = null;
 
   async function mcpRequest(method, params = {}) {
-    const body = {
-      jsonrpc: '2.0',
-      method: method,
-      params: params,
-      id: Date.now()
-    };
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json, text/event-stream'
-    };
-
+    const body = { jsonrpc: '2.0', method: method, params: params, id: Date.now() };
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
     const url = MCP_KEY ? `${MCP_URL}?code=${MCP_KEY}` : MCP_URL;
+    if (sessionId) headers['mcp-session-id'] = sessionId;
 
-    if (sessionId) {
-      headers['mcp-session-id'] = sessionId;
-    }
-
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(body)
-    });
-
+    const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
     const newSessionId = resp.headers.get('mcp-session-id');
     if (newSessionId) sessionId = newSessionId;
 
     const text = await resp.text();
-
-    // Parse SSE response
     const lines = text.split('\n');
     for (const line of lines) {
       if (line.startsWith('data: ')) {
         try { return JSON.parse(line.slice(6)); } catch(e) {}
       }
     }
-
     try { return JSON.parse(text); } catch(e) {}
     throw new Error('Failed to parse MCP response');
   }
@@ -540,8 +536,7 @@
       const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
       if (sessionId) headers['mcp-session-id'] = sessionId;
       await fetch(url, {
-        method: 'POST',
-        headers,
+        method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })
       });
     } catch(e) {
@@ -582,7 +577,6 @@
       }
 
       let html = `<div class="results-info">${data.result_count} passages found for "${escHtml(data.query)}"</div>`;
-
       for (const r of data.results) {
         html += `
           <div class="result-card">
@@ -591,7 +585,6 @@
             <div class="result-score">relevance: ${r.score}</div>
           </div>`;
       }
-
       container.innerHTML = html;
     } catch(e) {
       container.innerHTML = `<div class="empty-state">Search failed: ${escHtml(e.message)}</div>`;
@@ -601,152 +594,213 @@
     }
   }
 
-  // === Chat ===
-  let chatHistory = [];
+  // === Agentic Chat ===
+  // Maintains a conversation history in Anthropic message format.
+  // Each turn we call /api/chat with the current tools + history.
+  // Claude may respond with tool_use blocks; we execute those, append
+  // tool_result blocks, and call again until Claude returns a final answer.
 
-async function sendChat() {
+  let chatHistory = [];
+  const MAX_AGENT_ITERATIONS = 8;
+
+  // Tool definition Claude will see
+  const CODEX_TOOLS = [
+    {
+      name: "search_knowledge_base",
+      description: "Search the WFRP4e knowledge base for passages relevant to a query. Returns matching text chunks with document name, page number, and relevance score. Use this tool whenever you need specific rules, lore, stat blocks, career details, spell descriptions, timelines, or any other game content. You can call it multiple times with different queries to gather comprehensive information — for broad topics like timelines or lore compilations, make several targeted searches rather than one broad one.",
+      input_schema: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Search query. Can be keywords, phrases, or natural-language questions. The search uses hybrid keyword + semantic matching, so phrase it however feels natural."
+          },
+          max_results: {
+            type: "integer",
+            description: "Maximum passages to return (default 5, max 15). Use higher values for broad/compilation questions."
+          }
+        },
+        required: ["query"]
+      }
+    },
+    {
+      name: "list_documents",
+      description: "List all PDF documents in the WFRP4e knowledge base with their chunk counts and page totals. Useful for orienting yourself to what source material is available before searching.",
+      input_schema: { type: "object", properties: {}, required: [] }
+    },
+    {
+      name: "get_document_summary",
+      description: "Get the opening chunks of a specific PDF document to see what it's about. Pass the exact filename (from list_documents).",
+      input_schema: {
+        type: "object",
+        properties: {
+          document_name: { type: "string", description: "Exact PDF filename, e.g. 'WFRP_Altdorf_Crown_of_the_Empire.pdf'" }
+        },
+        required: ["document_name"]
+      }
+    }
+  ];
+
+  const SYSTEM_PROMPT = `You are the Old World Codex, an expert assistant for Warhammer Fantasy Roleplay 4th Edition (WFRP4e). You help GMs and players find rules, lore, careers, spells, creatures, items, and any other information from the source books.
+
+You have access to a search_knowledge_base tool that queries a library of 60+ official WFRP4e sourcebooks. Use it aggressively:
+- For any question about specific rules, content, or lore, search first before answering from general knowledge.
+- For broad or comparative questions (timelines, career comparisons, lists of creatures, etc.) issue multiple targeted searches to build a comprehensive picture.
+- Don't hesitate to refine or re-search if the first results don't fully answer the question.
+
+When you answer:
+- Cite specific documents and page numbers from search results (the results include this metadata).
+- Be precise about game mechanics (skill tests, modifiers, SL thresholds, dice).
+- If the source material truly doesn't cover something, say so clearly rather than making things up.
+- Keep answers practical and useful at the game table.`;
+
+  async function sendChat() {
     const input = document.getElementById('chatInput');
     const query = input.value.trim();
     if (!query) return;
 
-    input.value = '';
-    addChatMsg('user', query);
-
     const sendBtn = document.getElementById('chatSendBtn');
+    input.value = '';
     sendBtn.disabled = true;
 
-    addChatMsg('system', '🔍 Searching the knowledge base...');
+    addChatMsg('user', query);
+    chatHistory.push({ role: 'user', content: query });
 
-    // Generate multiple search queries for broader coverage
-    let searchQueries = [query];
+    const statusEl = addChatMsg('system', '<span class="loading"></span> Thinking...');
 
-    // Extract key terms and create variations
-    const words = query.toLowerCase().split(/\s+/);
-    if (words.length > 3 || query.match(/comprehensive|all|every|complete|full|combine|multiple|across/i)) {
-      // Broad question — do multiple targeted searches
-      try {
-        const planResp = await fetch('/api/chat', {
+    try {
+      let iteration = 0;
+      while (iteration < MAX_AGENT_ITERATIONS) {
+        iteration++;
+
+        const resp = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            system: 'You are a search query planner for a WFRP4e knowledge base. Given a user question, generate 3-5 targeted search queries. For timeline/history questions, include queries with specific date ranges and era names (e.g. "500 IC founding", "1111 Black Plague", "2302 Great War Chaos"). For rules questions, include the mechanic name and related terms. Return ONLY a JSON array of query strings, nothing else.',
-            messages: [{ role: 'user', content: query }]
+            system: SYSTEM_PROMPT,
+            messages: chatHistory,
+            tools: CODEX_TOOLS,
+            max_tokens: 4096
           })
         });
-        if (planResp.ok) {
-          const planData = await planResp.json();
-          const planText = planData.content?.[0]?.text || '';
-          try {
-            const queries = JSON.parse(planText);
-            if (Array.isArray(queries) && queries.length > 0) {
-              searchQueries = queries.slice(0, 5);
-            }
-          } catch(e) { /* use original query */ }
-        }
-      } catch(e) { /* use original query */ }
-    }
 
-    // Execute all searches
-    let allResults = [];
-    let searchCount = 0;
-    for (const sq of searchQueries) {
-      try {
-        const searchData = await mcpToolCall('search_knowledge_base', { query: sq, max_results: 10 });
-        if (searchData.results) {
-          for (const r of searchData.results) {
-            // Deduplicate by document + page
-            const key = r.document + ':' + r.page;
-            if (!allResults.find(x => x.document + ':' + x.page === key)) {
-              allResults.push(r);
-            }
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.error?.message || err.error || `API error ${resp.status}`);
+        }
+
+        const data = await resp.json();
+
+        if (data.type === 'error') {
+          throw new Error(data.error?.message || 'Claude API error');
+        }
+
+        // Append the full assistant message (including any tool_use blocks) to history
+        chatHistory.push({ role: 'assistant', content: data.content });
+
+        // Find tool_use blocks that need resolution
+        const toolUses = (data.content || []).filter(b => b.type === 'tool_use');
+
+        // If no tool calls, Claude gave a final answer — render and exit loop
+        if (toolUses.length === 0) {
+          statusEl.remove();
+          const textBlocks = (data.content || []).filter(b => b.type === 'text');
+          const finalText = textBlocks.map(b => b.text).join('\n\n').trim();
+          if (finalText) {
+            addChatMsg('assistant', formatMarkdown(finalText), true);
+          } else {
+            addChatMsg('system', '(no response)');
           }
+          break;
         }
-        searchCount++;
-      } catch(e) {
-        console.error('Search failed for:', sq, e);
-      }
-    }
 
-    // Sort by relevance and cap at 20
-    allResults.sort((a, b) => b.score - a.score);
-    allResults = allResults.slice(0, 20);
+        // Execute each tool call and gather results
+        const toolResults = [];
+        for (const toolUse of toolUses) {
+          addToolMsg(toolUse.name, toolUse.input);
 
-    removeLastSystemMsg();
+          let resultText;
+          try {
+            const result = await executeTool(toolUse.name, toolUse.input);
+            // Keep the result compact — remove the verbose "text" field
+            // can cause context bloat if many searches; but for this project
+            // the full text is what Claude needs to cite accurately, so keep it.
+            resultText = typeof result === 'string' ? result : JSON.stringify(result);
+          } catch(e) {
+            resultText = JSON.stringify({ error: e.message });
+          }
 
-    if (searchQueries.length > 1) {
-      addChatMsg('system', `🔍 Ran ${searchCount} searches, found ${allResults.length} unique passages. Thinking...`);
-    } else {
-      addChatMsg('system', `🔍 Found ${allResults.length} passages. Thinking...`);
-    }
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: resultText
+          });
+        }
 
-    let context = '';
-    if (allResults.length > 0) {
-      context = allResults.map(r =>
-        `[Source: ${r.document}, Page ${r.page}]\n${r.text}`
-      ).join('\n\n---\n\n');
-    }
+        // Send tool results back as a user message
+        chatHistory.push({ role: 'user', content: toolResults });
 
-    const systemPrompt = `You are the Old World Codex, an expert assistant for Warhammer Fantasy Roleplay 4th Edition (WFRP4e). You answer questions about rules, lore, careers, spells, creatures, items, and game mechanics using the provided source material.
-
-When answering:
-- Cite specific documents and page numbers when possible
-- Be precise about game mechanics (skill tests, modifiers, SL thresholds)
-- If the source material doesn't cover the question, say so clearly
-- Keep answers focused and practical for GMs and players at the table
-- When asked to compile or combine information from multiple sources, organize it clearly and note which source each piece comes from
-- IMPORTANT: You have access to search results from the knowledge base provided below. Work with what is provided — do not claim you cannot see the content. If the provided excerpts are insufficient for a comprehensive answer, summarize what you CAN see and suggest the user ask more specific follow-up questions to fill in gaps (e.g. "Ask me about the Ubersreik timeline" or "Ask about events in Altdorf between 1000-2000 IC").
-- When given timeline or chronological data from multiple sources, merge and organize it by date even if the sources overlap.
-- When compiling timelines, the search results contain actual dated entries (e.g. "82 IC", "1111 IC"). Organize these chronologically and include all dates found in the source material. Do not skip entries just because they seem minor.`;
-
-    const userMsgContent = context
-      ? `Here is relevant source material from the WFRP4e library:\n\n${context}\n\n---\n\nUser question: ${query}`
-      : query;
-
-    chatHistory.push({ role: 'user', content: userMsgContent });
-
-    try {
-      const resp = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system: systemPrompt,
-          messages: chatHistory.slice(-10)
-        })
-      });
-
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error?.message || `API error: ${resp.status}`);
+        // Loop continues — Claude will see the results and decide next step
       }
 
-      const data = await resp.json();
-      const reply = data.content.map(c => c.text || '').join('');
-
-      chatHistory.push({ role: 'assistant', content: reply });
-
-      removeLastSystemMsg();
-      addChatMsg('assistant', reply);
+      if (iteration >= MAX_AGENT_ITERATIONS) {
+        statusEl.remove();
+        addChatMsg('system', '(agent loop hit max iterations)');
+      }
     } catch(e) {
-      removeLastSystemMsg();
-      addChatMsg('system', `Error: ${e.message}`);
+      statusEl.remove();
+      addChatMsg('system', `Error: ${escHtml(e.message)}`);
+      console.error(e);
     } finally {
       sendBtn.disabled = false;
     }
   }
 
-  function addChatMsg(role, text) {
+  // Execute a tool by name (routed to the appropriate MCP call)
+  async function executeTool(name, input) {
+    switch (name) {
+      case 'search_knowledge_base':
+        return await mcpToolCall('search_knowledge_base', {
+          query: input.query,
+          max_results: Math.min(Math.max(input.max_results || 5, 1), 15)
+        });
+      case 'list_documents':
+        return await mcpToolCall('list_documents', {});
+      case 'get_document_summary':
+        return await mcpToolCall('get_document_summary', { document_name: input.document_name });
+      default:
+        throw new Error(`Unknown tool: ${name}`);
+    }
+  }
+
+  function addChatMsg(role, text, isHtml = false) {
     const container = document.getElementById('chatMessages');
     const div = document.createElement('div');
     div.className = `chat-msg ${role}`;
-    div.innerHTML = role === 'assistant' ? formatMarkdown(text) : escHtml(text);
+    div.innerHTML = isHtml ? text : escHtml(text);
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
+    return div;
   }
 
-  function removeLastSystemMsg() {
+  function addToolMsg(toolName, input) {
     const container = document.getElementById('chatMessages');
-    const msgs = container.querySelectorAll('.chat-msg.system');
-    if (msgs.length > 0) msgs[msgs.length - 1].remove();
+    const div = document.createElement('div');
+    div.className = 'chat-msg tool';
+
+    let desc = toolName;
+    if (toolName === 'search_knowledge_base' && input?.query) {
+      desc = `searching: "${escHtml(input.query)}"`;
+    } else if (toolName === 'list_documents') {
+      desc = 'listing library';
+    } else if (toolName === 'get_document_summary' && input?.document_name) {
+      desc = `opening: ${escHtml(input.document_name)}`;
+    }
+
+    div.innerHTML = `<span class="tool-label">⚙</span>${desc}`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+    return div;
   }
 
   // === Documents list ===
@@ -778,11 +832,11 @@ When answering:
   }
 
   // === Mode switching ===
-  function switchMode(mode) {
+  function switchMode(mode, ev) {
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
 
-    event.target.classList.add('active');
+    (ev?.target || ev?.currentTarget)?.classList.add('active');
     document.getElementById(`panel-${mode}`).classList.add('active');
 
     if (mode === 'docs') loadDocs();
