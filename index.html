@@ -15,8 +15,6 @@
     --blood-glow: #c62828;
     --gold: #c8a432;
     --gold-dim: #a68a28;
-    --shadow: rgba(20, 12, 5, 0.4);
-    --panel-bg: rgba(42, 31, 20, 0.92);
     --panel-border: #6b5a42;
     --result-bg: rgba(244, 232, 193, 0.06);
     --result-hover: rgba(200, 164, 50, 0.08);
@@ -90,11 +88,7 @@
     color: var(--ink-light);
   }
 
-  .user-info a {
-    color: var(--gold-dim);
-    text-decoration: none;
-  }
-
+  .user-info a { color: var(--gold-dim); text-decoration: none; }
   .user-info a:hover { text-decoration: underline; }
 
   .mode-tabs {
@@ -146,11 +140,7 @@
   .panel { display: none; }
   .panel.active { display: block; }
 
-  .search-box {
-    display: flex;
-    gap: 0;
-    margin-bottom: 1.5rem;
-  }
+  .search-box { display: flex; margin-bottom: 1.5rem; }
 
   .search-input {
     flex: 1;
@@ -328,7 +318,6 @@
 
   .chat-input-row {
     display: flex;
-    gap: 0;
     margin-top: 1rem;
   }
 
@@ -487,7 +476,7 @@
   const MCP_URL = '/api/mcp';
   const MCP_KEY = '';
 
-  // === Auth: show user info if available ===
+  // === Auth ===
   async function loadUserInfo() {
     try {
       const resp = await fetch('/.auth/me');
@@ -497,7 +486,7 @@
         document.getElementById('userInfo').innerHTML =
           `${escHtml(name)} · <a href="/.auth/logout">Sign out</a>`;
       }
-    } catch(e) { /* not on Static Web Apps, skip */ }
+    } catch(e) {}
   }
   loadUserInfo();
 
@@ -539,9 +528,7 @@
         method: 'POST', headers,
         body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })
       });
-    } catch(e) {
-      console.error('MCP init failed:', e);
-    }
+    } catch(e) { console.error('MCP init failed:', e); }
   }
 
   async function mcpToolCall(toolName, args = {}) {
@@ -556,7 +543,7 @@
     return result;
   }
 
-  // === Search ===
+  // === Search panel ===
   async function doSearch() {
     const query = document.getElementById('searchInput').value.trim();
     if (!query) return;
@@ -594,30 +581,31 @@
     }
   }
 
-  // === Agentic Chat ===
-  // Maintains a conversation history in Anthropic message format.
-  // Each turn we call /api/chat with the current tools + history.
-  // Claude may respond with tool_use blocks; we execute those, append
-  // tool_result blocks, and call again until Claude returns a final answer.
+  // === Agentic Chat with Token Budgeting ===
+  // Rate-limit defense (Anthropic tier-1 = 30k TPM):
+  //   - cap max_results at 5 per search
+  //   - truncate each chunk's text to MAX_RESULT_TEXT_CHARS
+  //   - compress old tool_result blocks after 2 turns to just citations
 
   let chatHistory = [];
-  const MAX_AGENT_ITERATIONS = 8;
+  const MAX_AGENT_ITERATIONS = 6;
+  const MAX_RESULT_TEXT_CHARS = 600;
+  const MAX_RESULTS_PER_SEARCH = 5;
 
-  // Tool definition Claude will see
   const CODEX_TOOLS = [
     {
       name: "search_knowledge_base",
-      description: "Search the WFRP4e knowledge base for passages relevant to a query. Returns matching text chunks with document name, page number, and relevance score. Use this tool whenever you need specific rules, lore, stat blocks, career details, spell descriptions, timelines, or any other game content. You can call it multiple times with different queries to gather comprehensive information — for broad topics like timelines or lore compilations, make several targeted searches rather than one broad one.",
+      description: "Search the WFRP4e knowledge base. Returns up to 5 concise passages per call with document name, page number, and relevance score. Prefer multiple targeted searches (each with a specific focused query) over a single broad search.",
       input_schema: {
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "Search query. Can be keywords, phrases, or natural-language questions. The search uses hybrid keyword + semantic matching, so phrase it however feels natural."
+            description: "Search query. Hybrid keyword + semantic search, so phrase it naturally."
           },
           max_results: {
             type: "integer",
-            description: "Maximum passages to return (default 5, max 15). Use higher values for broad/compilation questions."
+            description: "Passages to return, default 5, max 5. To gather more info, issue additional searches with different queries."
           }
         },
         required: ["query"]
@@ -625,12 +613,12 @@
     },
     {
       name: "list_documents",
-      description: "List all PDF documents in the WFRP4e knowledge base with their chunk counts and page totals. Useful for orienting yourself to what source material is available before searching.",
+      description: "List all PDF documents in the knowledge base with chunk counts and page totals.",
       input_schema: { type: "object", properties: {}, required: [] }
     },
     {
       name: "get_document_summary",
-      description: "Get the opening chunks of a specific PDF document to see what it's about. Pass the exact filename (from list_documents).",
+      description: "Get the opening chunks of a specific PDF. Pass the exact filename from list_documents.",
       input_schema: {
         type: "object",
         properties: {
@@ -643,16 +631,62 @@
 
   const SYSTEM_PROMPT = `You are the Old World Codex, an expert assistant for Warhammer Fantasy Roleplay 4th Edition (WFRP4e). You help GMs and players find rules, lore, careers, spells, creatures, items, and any other information from the source books.
 
-You have access to a search_knowledge_base tool that queries a library of 60+ official WFRP4e sourcebooks. Use it aggressively:
-- For any question about specific rules, content, or lore, search first before answering from general knowledge.
-- For broad or comparative questions (timelines, career comparisons, lists of creatures, etc.) issue multiple targeted searches to build a comprehensive picture.
-- Don't hesitate to refine or re-search if the first results don't fully answer the question.
+You have a search_knowledge_base tool that queries 60+ official WFRP4e sourcebooks. Use it efficiently:
+- Search first before answering from general knowledge.
+- Each search returns at most 5 concise excerpts. For broad questions (timelines, comparisons, compilations), issue several focused searches with different specific queries rather than one vague query.
+- Keep the total number of searches reasonable (typically 2-4 for most questions).
+- Don't hesitate to refine and re-search if results don't fully answer the question.
 
 When you answer:
-- Cite specific documents and page numbers from search results (the results include this metadata).
-- Be precise about game mechanics (skill tests, modifiers, SL thresholds, dice).
-- If the source material truly doesn't cover something, say so clearly rather than making things up.
+- Cite documents and page numbers from search results.
+- Be precise about game mechanics (skill tests, modifiers, SL thresholds).
+- If the source material truly doesn't cover something, say so rather than making things up.
 - Keep answers practical and useful at the game table.`;
+
+  // Shrink each chunk's text before sending to Claude
+  function compactSearchResult(data) {
+    if (!data || !data.results) return data;
+    return {
+      query: data.query,
+      result_count: data.results.length,
+      results: data.results.map(r => ({
+        document: r.document,
+        page: r.page,
+        score: r.score,
+        text: (r.text || '').length > MAX_RESULT_TEXT_CHARS
+          ? r.text.slice(0, MAX_RESULT_TEXT_CHARS) + '…'
+          : r.text
+      }))
+    };
+  }
+
+  // Replace tool_result blocks in older turns with compact citation summaries
+  function trimOldToolResults(history, keepLastN = 2) {
+    const indices = [];
+    for (let i = 0; i < history.length; i++) {
+      const m = history[i];
+      if (m.role === 'user' && Array.isArray(m.content)
+          && m.content.some(b => b?.type === 'tool_result')) {
+        indices.push(i);
+      }
+    }
+    const toCompress = indices.slice(0, Math.max(0, indices.length - keepLastN));
+    for (const idx of toCompress) {
+      history[idx].content = history[idx].content.map(b => {
+        if (b?.type !== 'tool_result') return b;
+        let summary = '[earlier search results summarized]';
+        try {
+          const parsed = JSON.parse(b.content);
+          if (parsed?.results?.length) {
+            const cites = parsed.results.map(r => `${r.document} p${r.page}`).join(', ');
+            summary = `[earlier search for "${parsed.query || '?'}" — found: ${cites}]`;
+          }
+        } catch(e) {}
+        return { type: 'tool_result', tool_use_id: b.tool_use_id, content: summary };
+      });
+    }
+    return history;
+  }
 
   async function sendChat() {
     const input = document.getElementById('chatInput');
@@ -666,12 +700,14 @@ When you answer:
     addChatMsg('user', query);
     chatHistory.push({ role: 'user', content: query });
 
-    const statusEl = addChatMsg('system', '<span class="loading"></span> Thinking...');
+    const statusEl = addChatMsg('system', '<span class="loading"></span> Thinking...', true);
 
     try {
       let iteration = 0;
       while (iteration < MAX_AGENT_ITERATIONS) {
         iteration++;
+
+        trimOldToolResults(chatHistory, 2);
 
         const resp = await fetch('/api/chat', {
           method: 'POST',
@@ -680,28 +716,30 @@ When you answer:
             system: SYSTEM_PROMPT,
             messages: chatHistory,
             tools: CODEX_TOOLS,
-            max_tokens: 4096
+            max_tokens: 3072
           })
         });
 
         if (!resp.ok) {
-          const err = await resp.json();
-          throw new Error(err.error?.message || err.error || `API error ${resp.status}`);
+          let msg;
+          try {
+            const err = await resp.json();
+            msg = err.error?.message || err.error || `API error ${resp.status}`;
+          } catch(e) {
+            msg = `API error ${resp.status}`;
+          }
+          throw new Error(msg);
         }
 
         const data = await resp.json();
-
         if (data.type === 'error') {
           throw new Error(data.error?.message || 'Claude API error');
         }
 
-        // Append the full assistant message (including any tool_use blocks) to history
         chatHistory.push({ role: 'assistant', content: data.content });
 
-        // Find tool_use blocks that need resolution
         const toolUses = (data.content || []).filter(b => b.type === 'tool_use');
 
-        // If no tool calls, Claude gave a final answer — render and exit loop
         if (toolUses.length === 0) {
           statusEl.remove();
           const textBlocks = (data.content || []).filter(b => b.type === 'text');
@@ -714,17 +752,16 @@ When you answer:
           break;
         }
 
-        // Execute each tool call and gather results
         const toolResults = [];
         for (const toolUse of toolUses) {
           addToolMsg(toolUse.name, toolUse.input);
 
           let resultText;
           try {
-            const result = await executeTool(toolUse.name, toolUse.input);
-            // Keep the result compact — remove the verbose "text" field
-            // can cause context bloat if many searches; but for this project
-            // the full text is what Claude needs to cite accurately, so keep it.
+            let result = await executeTool(toolUse.name, toolUse.input);
+            if (toolUse.name === 'search_knowledge_base') {
+              result = compactSearchResult(result);
+            }
             resultText = typeof result === 'string' ? result : JSON.stringify(result);
           } catch(e) {
             resultText = JSON.stringify({ error: e.message });
@@ -737,10 +774,7 @@ When you answer:
           });
         }
 
-        // Send tool results back as a user message
         chatHistory.push({ role: 'user', content: toolResults });
-
-        // Loop continues — Claude will see the results and decide next step
       }
 
       if (iteration >= MAX_AGENT_ITERATIONS) {
@@ -756,13 +790,12 @@ When you answer:
     }
   }
 
-  // Execute a tool by name (routed to the appropriate MCP call)
   async function executeTool(name, input) {
     switch (name) {
       case 'search_knowledge_base':
         return await mcpToolCall('search_knowledge_base', {
           query: input.query,
-          max_results: Math.min(Math.max(input.max_results || 5, 1), 15)
+          max_results: Math.min(Math.max(input.max_results || 5, 1), MAX_RESULTS_PER_SEARCH)
         });
       case 'list_documents':
         return await mcpToolCall('list_documents', {});
@@ -803,7 +836,7 @@ When you answer:
     return div;
   }
 
-  // === Documents list ===
+  // === Documents panel ===
   async function loadDocs() {
     try {
       const data = await mcpToolCall('list_documents');
@@ -831,7 +864,6 @@ When you answer:
     }
   }
 
-  // === Mode switching ===
   function switchMode(mode, ev) {
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -844,7 +876,6 @@ When you answer:
     if (mode === 'chat') document.getElementById('chatInput').focus();
   }
 
-  // === Utilities ===
   function escHtml(s) {
     if (typeof s !== 'string') return String(s);
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -861,7 +892,6 @@ When you answer:
       .replace(/\n/g, '<br>');
   }
 
-  // === Init ===
   initMcp();
 </script>
 
