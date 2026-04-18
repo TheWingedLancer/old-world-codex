@@ -581,17 +581,21 @@
     }
   }
 
-  // === Agentic Chat with Token Budgeting ===
+  // === Agentic Chat with Token Budgeting + Prompt Caching ===
   // Rate-limit defense (Anthropic tier-1 = 30k TPM):
-  //   - cap max_results at 5 per search
-  //   - truncate each chunk's text to MAX_RESULT_TEXT_CHARS
-  //   - compress old tool_result blocks after 2 turns to just citations
+  //   - cap max_results at 5 per search, truncate each chunk to 600 chars
+  //   - compress tool_result blocks after 1 turn (keep only newest full-size)
+  //   - cache the big static parts (system prompt + tool defs) so they
+  //     don't count toward the rate limit on subsequent iterations
 
   let chatHistory = [];
   const MAX_AGENT_ITERATIONS = 6;
   const MAX_RESULT_TEXT_CHARS = 600;
   const MAX_RESULTS_PER_SEARCH = 5;
 
+  // Tool definitions. The LAST tool has cache_control — the Anthropic API
+  // caches the prefix up to and including that block, which means the
+  // system prompt and all tool definitions get cached together.
   const CODEX_TOOLS = [
     {
       name: "search_knowledge_base",
@@ -625,11 +629,15 @@
           document_name: { type: "string", description: "Exact PDF filename, e.g. 'WFRP_Altdorf_Crown_of_the_Empire.pdf'" }
         },
         required: ["document_name"]
-      }
+      },
+      // Cache everything up through this block — system prompt and all tool defs
+      cache_control: { type: "ephemeral" }
     }
   ];
 
-  const SYSTEM_PROMPT = `You are the Old World Codex, an expert assistant for Warhammer Fantasy Roleplay 4th Edition (WFRP4e). You help GMs and players find rules, lore, careers, spells, creatures, items, and any other information from the source books.
+  // System prompt is sent as a content block with cache_control so the
+  // API will cache it. We pass it as an array of content blocks.
+  const SYSTEM_PROMPT_TEXT = `You are the Old World Codex, an expert assistant for Warhammer Fantasy Roleplay 4th Edition (WFRP4e). You help GMs and players find rules, lore, careers, spells, creatures, items, and any other information from the source books.
 
 You have a search_knowledge_base tool that queries 60+ official WFRP4e sourcebooks. Use it efficiently:
 - Search first before answering from general knowledge.
@@ -643,7 +651,14 @@ When you answer:
 - If the source material truly doesn't cover something, say so rather than making things up.
 - Keep answers practical and useful at the game table.`;
 
-  // Shrink each chunk's text before sending to Claude
+  const SYSTEM_PROMPT_CACHED = [
+    {
+      type: "text",
+      text: SYSTEM_PROMPT_TEXT,
+      cache_control: { type: "ephemeral" }
+    }
+  ];
+
   function compactSearchResult(data) {
     if (!data || !data.results) return data;
     return {
@@ -660,8 +675,9 @@ When you answer:
     };
   }
 
-  // Replace tool_result blocks in older turns with compact citation summaries
-  function trimOldToolResults(history, keepLastN = 2) {
+  // Replace tool_result blocks in older turns with compact citation summaries.
+  // With keepLastN = 1, ONLY the most recent search's results stay full-size.
+  function trimOldToolResults(history, keepLastN = 1) {
     const indices = [];
     for (let i = 0; i < history.length; i++) {
       const m = history[i];
@@ -678,7 +694,9 @@ When you answer:
         try {
           const parsed = JSON.parse(b.content);
           if (parsed?.results?.length) {
-            const cites = parsed.results.map(r => `${r.document} p${r.page}`).join(', ');
+            const cites = parsed.results
+              .map(r => `${r.document} p${r.page}`)
+              .join(', ');
             summary = `[earlier search for "${parsed.query || '?'}" — found: ${cites}]`;
           }
         } catch(e) {}
@@ -707,13 +725,14 @@ When you answer:
       while (iteration < MAX_AGENT_ITERATIONS) {
         iteration++;
 
-        trimOldToolResults(chatHistory, 2);
+        // Compress tool_result blocks — only keep the NEWEST one full-size
+        trimOldToolResults(chatHistory, 1);
 
         const resp = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            system: SYSTEM_PROMPT,
+            system: SYSTEM_PROMPT_CACHED,
             messages: chatHistory,
             tools: CODEX_TOOLS,
             max_tokens: 3072

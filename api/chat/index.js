@@ -21,7 +21,6 @@ module.exports = async function (context, req) {
       messages: messages
     };
 
-    // If tools were provided, pass them through to Claude
     if (tools && Array.isArray(tools) && tools.length > 0) {
       payload.tools = tools;
     }
@@ -31,7 +30,9 @@ module.exports = async function (context, req) {
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        // Prompt caching is now generally available but harmless to request
+        'anthropic-beta': 'prompt-caching-2024-07-31'
       },
       body: JSON.stringify(payload)
     });
