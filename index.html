@@ -9,21 +9,38 @@
   :root {
     --parchment: #f4e8c1;
     --parchment-dark: #e8d5a3;
+    /* WCAG AA: darker text that was 1.9:1 bumped to meet 4.5:1 */
+    --parchment-muted: #b8a878;      /* replaces --ink-light for muted text; 7.0:1 on ink */
     --ink: #2a1f14;
-    --ink-light: #5a4a3a;
+    /* WCAG AA: borders bumped from 2.43:1 to meet 3:1 non-text minimum */
+    --panel-border: #9a8766;         /* replaces old #6b5a42; 4.68:1 on ink */
     --blood: #8b1a1a;
     --blood-glow: #c62828;
     --gold: #c8a432;
     --gold-dim: #a68a28;
-    --panel-border: #6b5a42;
     --result-bg: rgba(244, 232, 193, 0.06);
     --result-hover: rgba(200, 164, 50, 0.08);
+    /* Strong focus ring used site-wide */
+    --focus-ring: #ffd956;
     --font-display: 'Cinzel', serif;
     --font-body: 'Crimson Text', serif;
     --font-mono: 'JetBrains Mono', monospace;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  /* Visually-hidden utility for screen-reader-only labels */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+  }
 
   body {
     font-family: var(--font-body);
@@ -43,6 +60,15 @@
       repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(244, 232, 193, 0.01) 2px, rgba(244, 232, 193, 0.01) 4px);
     pointer-events: none;
     z-index: 0;
+  }
+
+  /* Global focus-visible ring. Shows only for keyboard focus,
+     not mouse clicks. Meets WCAG 2.2 Focus Appearance. */
+  :focus { outline: none; }
+  :focus-visible {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
   .header {
@@ -73,23 +99,22 @@
   }
 
   .header p {
-    color: var(--parchment-dark);
+    color: var(--parchment-muted);
     font-style: italic;
     font-size: 1.05rem;
     margin-top: 0.4rem;
-    opacity: 0.7;
   }
 
   .user-info {
     position: absolute;
     top: 1rem;
     right: 1.5rem;
-    font-size: 0.8rem;
-    color: var(--ink-light);
+    font-size: 0.85rem;
+    color: var(--parchment-muted);
   }
 
-  .user-info a { color: var(--gold-dim); text-decoration: none; }
-  .user-info a:hover { text-decoration: underline; }
+  .user-info a { color: var(--gold-dim); text-decoration: underline; }
+  .user-info a:hover { color: var(--gold); }
 
   .mode-tabs {
     display: flex;
@@ -109,7 +134,7 @@
     padding: 0.7rem 2rem;
     border: 1px solid var(--panel-border);
     background: transparent;
-    color: var(--parchment-dark);
+    color: var(--parchment);
     cursor: pointer;
     transition: all 0.3s;
   }
@@ -117,16 +142,16 @@
   .mode-tab:first-child { border-radius: 4px 0 0 4px; }
   .mode-tab:last-child { border-radius: 0 4px 4px 0; }
 
-  .mode-tab.active {
+  .mode-tab[aria-selected="true"] {
     background: var(--blood);
     border-color: var(--blood);
     color: var(--parchment);
     text-shadow: 0 1px 3px rgba(0,0,0,0.5);
   }
 
-  .mode-tab:not(.active):hover {
-    background: rgba(200, 164, 50, 0.1);
-    border-color: var(--gold-dim);
+  .mode-tab:not([aria-selected="true"]):hover {
+    background: rgba(200, 164, 50, 0.15);
+    border-color: var(--gold);
   }
 
   .main {
@@ -152,11 +177,17 @@
     border-right: none;
     border-radius: 4px 0 0 4px;
     color: var(--parchment);
-    outline: none;
     transition: border-color 0.3s, background 0.3s;
   }
 
-  .search-input::placeholder { color: var(--ink-light); font-style: italic; }
+  /* Placeholder now meets 4.5:1 contrast */
+  .search-input::placeholder,
+  .chat-input::placeholder {
+    color: var(--parchment-muted);
+    font-style: italic;
+    opacity: 1;
+  }
+
   .search-input:focus { border-color: var(--gold); background: rgba(244, 232, 193, 0.12); }
 
   .search-btn {
@@ -175,11 +206,11 @@
   }
 
   .search-btn:hover { background: var(--blood-glow); }
-  .search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .results-info {
-    font-size: 0.9rem;
-    color: var(--gold-dim);
+    font-size: 0.95rem;
+    color: var(--gold);
     margin-bottom: 1rem;
     font-style: italic;
   }
@@ -201,7 +232,7 @@
 
   .result-source {
     font-family: var(--font-display);
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 600;
     color: var(--gold);
     letter-spacing: 0.08em;
@@ -210,12 +241,12 @@
   }
 
   .result-source span {
-    color: var(--parchment-dark);
+    color: var(--parchment);
     font-family: var(--font-body);
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     margin-left: 0.5rem;
   }
 
@@ -232,10 +263,11 @@
   .result-text::-webkit-scrollbar-track { background: transparent; }
   .result-text::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 2px; }
 
+  /* Score text bumped to meet AA */
   .result-score {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
-    color: var(--ink-light);
+    font-size: 0.75rem;
+    color: var(--parchment-muted);
     margin-top: 0.5rem;
   }
 
@@ -268,6 +300,12 @@
     animation: fadeIn 0.3s ease;
   }
 
+  /* Respect users who prefer no motion */
+  @media (prefers-reduced-motion: reduce) {
+    .chat-msg { animation: none; }
+    .loading { animation: none; }
+  }
+
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
@@ -276,7 +314,7 @@
   .chat-msg.user {
     align-self: flex-end;
     background: rgba(139, 26, 26, 0.3);
-    border: 1px solid rgba(139, 26, 26, 0.5);
+    border: 1px solid rgba(139, 26, 26, 0.65);
     color: var(--parchment);
   }
 
@@ -290,8 +328,8 @@
   .chat-msg.system {
     align-self: center;
     font-style: italic;
-    font-size: 0.85rem;
-    color: var(--ink-light);
+    font-size: 0.9rem;
+    color: var(--parchment-muted);
     border: none;
     background: none;
     padding: 0.5rem;
@@ -300,14 +338,13 @@
   .chat-msg.tool {
     align-self: flex-start;
     font-family: var(--font-mono);
-    font-size: 0.78rem;
-    color: var(--gold-dim);
-    background: rgba(200, 164, 50, 0.04);
-    border: 1px solid rgba(200, 164, 50, 0.2);
+    font-size: 0.85rem;
+    color: var(--gold);
+    background: rgba(200, 164, 50, 0.06);
+    border: 1px solid rgba(200, 164, 50, 0.35);
     border-radius: 4px;
     padding: 0.5rem 0.9rem;
     max-width: 90%;
-    opacity: 0.85;
   }
 
   .chat-msg.tool .tool-label {
@@ -331,14 +368,12 @@
     border-right: none;
     border-radius: 4px 0 0 4px;
     color: var(--parchment);
-    outline: none;
     transition: border-color 0.3s;
     resize: none;
     min-height: 48px;
     max-height: 120px;
   }
 
-  .chat-input::placeholder { color: var(--ink-light); font-style: italic; }
   .chat-input:focus { border-color: var(--gold); }
 
   .chat-send {
@@ -357,7 +392,8 @@
   }
 
   .chat-send:hover { background: var(--blood-glow); }
-  .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+  .chat-send:disabled { opacity: 0.6; cursor: not-allowed; }
+  .chat-send[aria-busy="true"] { opacity: 0.6; cursor: wait; }
 
   .loading {
     display: inline-block;
@@ -380,17 +416,18 @@
     justify-content: space-between;
     align-items: baseline;
     padding: 0.6rem 0;
-    border-bottom: 1px solid rgba(107, 90, 66, 0.3);
+    border-bottom: 1px solid var(--panel-border);
     font-size: 0.95rem;
   }
 
   .doc-item:last-child { border-bottom: none; }
   .doc-name { color: var(--parchment); }
 
+  /* Doc meta bumped to meet AA */
   .doc-meta {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--ink-light);
+    font-size: 0.8rem;
+    color: var(--parchment-muted);
     white-space: nowrap;
     margin-left: 1rem;
   }
@@ -398,13 +435,12 @@
   .empty-state {
     text-align: center;
     padding: 3rem 1rem;
-    color: var(--ink-light);
+    color: var(--parchment-muted);
     font-style: italic;
     font-size: 1.1rem;
   }
 
-  .empty-state::before {
-    content: '📜';
+  .empty-state .empty-icon {
     display: block;
     font-size: 2.5rem;
     margin-bottom: 1rem;
@@ -423,53 +459,71 @@
 </head>
 <body>
 
-<div class="header">
+<header class="header">
   <div class="user-info" id="userInfo"></div>
   <h1>The Old World Codex</h1>
   <p>WFRP 4th Edition Knowledge Base</p>
+</header>
+
+<!-- Tablist: proper ARIA pattern -->
+<div class="mode-tabs" role="tablist" aria-label="Codex sections">
+  <button class="mode-tab" role="tab" id="tab-search"
+          aria-selected="true" aria-controls="panel-search"
+          onclick="switchMode('search', event)">Search</button>
+  <button class="mode-tab" role="tab" id="tab-chat"
+          aria-selected="false" aria-controls="panel-chat" tabindex="-1"
+          onclick="switchMode('chat', event)">Ask the Codex</button>
+  <button class="mode-tab" role="tab" id="tab-docs"
+          aria-selected="false" aria-controls="panel-docs" tabindex="-1"
+          onclick="switchMode('docs', event)">Library</button>
 </div>
 
-<div class="mode-tabs">
-  <button class="mode-tab active" onclick="switchMode('search', event)">Search</button>
-  <button class="mode-tab" onclick="switchMode('chat', event)">Ask the Codex</button>
-  <button class="mode-tab" onclick="switchMode('docs', event)">Library</button>
-</div>
+<main class="main">
 
-<div class="main">
-
-  <div id="panel-search" class="panel active">
+  <section id="panel-search" class="panel active" role="tabpanel" aria-labelledby="tab-search">
     <div class="search-box">
-      <input type="text" class="search-input" id="searchInput"
+      <label for="searchInput" class="sr-only">Search the WFRP4e knowledge base</label>
+      <input type="search" class="search-input" id="searchInput"
              placeholder="Search the tomes... e.g. 'career changes', 'overcasting rules'"
              onkeydown="if(event.key==='Enter')doSearch()">
       <button class="search-btn" id="searchBtn" onclick="doSearch()">Search</button>
     </div>
-    <div id="searchResults">
-      <div class="empty-state">Enter a query to search across all WFRP4e documents.</div>
+    <div id="searchResults" aria-live="polite" aria-busy="false">
+      <div class="empty-state">
+        <span class="empty-icon" aria-hidden="true">📜</span>
+        Enter a query to search across all WFRP4e documents.
+      </div>
     </div>
-  </div>
+  </section>
 
-  <div id="panel-chat" class="panel">
+  <section id="panel-chat" class="panel" role="tabpanel" aria-labelledby="tab-chat" hidden>
     <div class="chat-container">
-      <div class="chat-messages" id="chatMessages">
+      <div class="chat-messages" id="chatMessages" role="log"
+           aria-label="Codex conversation" aria-live="polite" aria-atomic="false">
         <div class="chat-msg system">Ask anything about WFRP4e rules, lore, careers, spells, creatures, and more. The Codex will search the library as needed and answer from the source material.</div>
       </div>
       <div class="chat-input-row">
+        <label for="chatInput" class="sr-only">Your question for the Codex</label>
         <textarea class="chat-input" id="chatInput" rows="1"
                   placeholder="Ask the Codex a question..."
+                  aria-describedby="chatInputHint"
                   onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
         <button class="chat-send" id="chatSendBtn" onclick="sendChat()">Send</button>
       </div>
+      <div id="chatInputHint" class="sr-only">Press Enter to send. Press Shift plus Enter for a new line.</div>
     </div>
-  </div>
+  </section>
 
-  <div id="panel-docs" class="panel">
-    <div id="docsList">
-      <div class="empty-state">Loading library catalogue...</div>
+  <section id="panel-docs" class="panel" role="tabpanel" aria-labelledby="tab-docs" hidden>
+    <div id="docsList" aria-live="polite" aria-busy="false">
+      <div class="empty-state">
+        <span class="empty-icon" aria-hidden="true">📜</span>
+        Loading library catalogue...
+      </div>
     </div>
-  </div>
+  </section>
 
-</div>
+</main>
 
 <script>
   // === Configuration ===
@@ -552,50 +606,47 @@
     const container = document.getElementById('searchResults');
 
     btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
     btn.textContent = 'Searching...';
-    container.innerHTML = '<div class="empty-state"><span class="loading"></span> Consulting the tomes...</div>';
+    container.setAttribute('aria-busy', 'true');
+    container.innerHTML = '<div class="empty-state"><span class="loading" aria-hidden="true"></span> Consulting the tomes...</div>';
 
     try {
       const data = await mcpToolCall('search_knowledge_base', { query, max_results: 10 });
 
       if (data.message && !data.results) {
-        container.innerHTML = `<div class="empty-state">${escHtml(data.message)}</div>`;
+        container.innerHTML = `<div class="empty-state" role="status">${escHtml(data.message)}</div>`;
         return;
       }
 
-      let html = `<div class="results-info">${data.result_count} passages found for "${escHtml(data.query)}"</div>`;
+      let html = `<p class="results-info" role="status">${data.result_count} passages found for &ldquo;${escHtml(data.query)}&rdquo;</p>`;
+      html += '<ul style="list-style:none;padding:0;margin:0">';
       for (const r of data.results) {
         html += `
-          <div class="result-card">
+          <li class="result-card">
             <div class="result-source">${escHtml(r.document)} <span>Page ${r.page}</span></div>
-            <div class="result-text">${escHtml(r.text)}</div>
-            <div class="result-score">relevance: ${r.score}</div>
-          </div>`;
+            <div class="result-text" tabindex="0" aria-label="Passage text">${escHtml(r.text)}</div>
+            <div class="result-score"><span class="sr-only">Relevance score: </span>relevance: ${r.score}</div>
+          </li>`;
       }
+      html += '</ul>';
       container.innerHTML = html;
     } catch(e) {
-      container.innerHTML = `<div class="empty-state">Search failed: ${escHtml(e.message)}</div>`;
+      container.innerHTML = `<div class="empty-state" role="alert">Search failed: ${escHtml(e.message)}</div>`;
     } finally {
       btn.disabled = false;
+      btn.removeAttribute('aria-busy');
       btn.textContent = 'Search';
+      container.setAttribute('aria-busy', 'false');
     }
   }
 
-  // === Agentic Chat with Token Budgeting + Prompt Caching ===
-  // Rate-limit defense (Anthropic tier-1 = 30k TPM):
-  //   - cap max_results at 5 per search, truncate each chunk to 600 chars
-  //   - compress tool_result blocks after 1 turn (keep only newest full-size)
-  //   - cache the big static parts (system prompt + tool defs) so they
-  //     don't count toward the rate limit on subsequent iterations
-
+  // === Agentic Chat ===
   let chatHistory = [];
   const MAX_AGENT_ITERATIONS = 6;
   const MAX_RESULT_TEXT_CHARS = 600;
   const MAX_RESULTS_PER_SEARCH = 5;
 
-  // Tool definitions. The LAST tool has cache_control — the Anthropic API
-  // caches the prefix up to and including that block, which means the
-  // system prompt and all tool definitions get cached together.
   const CODEX_TOOLS = [
     {
       name: "search_knowledge_base",
@@ -603,14 +654,8 @@
       input_schema: {
         type: "object",
         properties: {
-          query: {
-            type: "string",
-            description: "Search query. Hybrid keyword + semantic search, so phrase it naturally."
-          },
-          max_results: {
-            type: "integer",
-            description: "Passages to return, default 5, max 5. To gather more info, issue additional searches with different queries."
-          }
+          query: { type: "string", description: "Search query. Hybrid keyword + semantic search, so phrase it naturally." },
+          max_results: { type: "integer", description: "Passages to return, default 5, max 5. To gather more info, issue additional searches with different queries." }
         },
         required: ["query"]
       }
@@ -630,13 +675,10 @@
         },
         required: ["document_name"]
       },
-      // Cache everything up through this block — system prompt and all tool defs
       cache_control: { type: "ephemeral" }
     }
   ];
 
-  // System prompt is sent as a content block with cache_control so the
-  // API will cache it. We pass it as an array of content blocks.
   const SYSTEM_PROMPT_TEXT = `You are the Old World Codex, an expert assistant for Warhammer Fantasy Roleplay 4th Edition (WFRP4e). You help GMs and players find rules, lore, careers, spells, creatures, items, and any other information from the source books.
 
 You have a search_knowledge_base tool that queries 60+ official WFRP4e sourcebooks. Use it efficiently:
@@ -652,11 +694,7 @@ When you answer:
 - Keep answers practical and useful at the game table.`;
 
   const SYSTEM_PROMPT_CACHED = [
-    {
-      type: "text",
-      text: SYSTEM_PROMPT_TEXT,
-      cache_control: { type: "ephemeral" }
-    }
+    { type: "text", text: SYSTEM_PROMPT_TEXT, cache_control: { type: "ephemeral" } }
   ];
 
   function compactSearchResult(data) {
@@ -675,8 +713,6 @@ When you answer:
     };
   }
 
-  // Replace tool_result blocks in older turns with compact citation summaries.
-  // With keepLastN = 1, ONLY the most recent search's results stay full-size.
   function trimOldToolResults(history, keepLastN = 1) {
     const indices = [];
     for (let i = 0; i < history.length; i++) {
@@ -694,9 +730,7 @@ When you answer:
         try {
           const parsed = JSON.parse(b.content);
           if (parsed?.results?.length) {
-            const cites = parsed.results
-              .map(r => `${r.document} p${r.page}`)
-              .join(', ');
+            const cites = parsed.results.map(r => `${r.document} p${r.page}`).join(', ');
             summary = `[earlier search for "${parsed.query || '?'}" — found: ${cites}]`;
           }
         } catch(e) {}
@@ -704,6 +738,13 @@ When you answer:
       });
     }
     return history;
+  }
+
+  // Auto-scroll respects user scroll position:
+  // only scroll if the user is already at (or near) the bottom of the chat log.
+  function maybeScrollChat(container) {
+    const nearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 80;
+    if (nearBottom) container.scrollTop = container.scrollHeight;
   }
 
   async function sendChat() {
@@ -714,18 +755,17 @@ When you answer:
     const sendBtn = document.getElementById('chatSendBtn');
     input.value = '';
     sendBtn.disabled = true;
+    sendBtn.setAttribute('aria-busy', 'true');
 
     addChatMsg('user', query);
     chatHistory.push({ role: 'user', content: query });
 
-    const statusEl = addChatMsg('system', '<span class="loading"></span> Thinking...', true);
+    const statusEl = addChatMsg('system', '<span class="loading" aria-hidden="true"></span> Thinking...', true);
 
     try {
       let iteration = 0;
       while (iteration < MAX_AGENT_ITERATIONS) {
         iteration++;
-
-        // Compress tool_result blocks — only keep the NEWEST one full-size
         trimOldToolResults(chatHistory, 1);
 
         const resp = await fetch('/api/chat', {
@@ -744,16 +784,12 @@ When you answer:
           try {
             const err = await resp.json();
             msg = err.error?.message || err.error || `API error ${resp.status}`;
-          } catch(e) {
-            msg = `API error ${resp.status}`;
-          }
+          } catch(e) { msg = `API error ${resp.status}`; }
           throw new Error(msg);
         }
 
         const data = await resp.json();
-        if (data.type === 'error') {
-          throw new Error(data.error?.message || 'Claude API error');
-        }
+        if (data.type === 'error') throw new Error(data.error?.message || 'Claude API error');
 
         chatHistory.push({ role: 'assistant', content: data.content });
 
@@ -806,6 +842,7 @@ When you answer:
       console.error(e);
     } finally {
       sendBtn.disabled = false;
+      sendBtn.removeAttribute('aria-busy');
     }
   }
 
@@ -829,9 +866,22 @@ When you answer:
     const container = document.getElementById('chatMessages');
     const div = document.createElement('div');
     div.className = `chat-msg ${role}`;
-    div.innerHTML = isHtml ? text : escHtml(text);
+    // Mark roles for assistive tech
+    if (role === 'user') {
+      div.innerHTML = `<span class="sr-only">You asked: </span>`;
+    } else if (role === 'assistant') {
+      div.innerHTML = `<span class="sr-only">Codex answered: </span>`;
+    }
+    if (isHtml) {
+      div.innerHTML += text;
+    } else {
+      // When not using HTML mode, escape
+      const textNode = document.createElement('span');
+      textNode.textContent = text;
+      div.appendChild(textNode);
+    }
     container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
+    maybeScrollChat(container);
     return div;
   }
 
@@ -839,61 +889,101 @@ When you answer:
     const container = document.getElementById('chatMessages');
     const div = document.createElement('div');
     div.className = 'chat-msg tool';
+    div.setAttribute('role', 'status');
 
-    let desc = toolName;
+    let desc, srDesc;
     if (toolName === 'search_knowledge_base' && input?.query) {
       desc = `searching: "${escHtml(input.query)}"`;
+      srDesc = `Searching the knowledge base for: ${input.query}`;
     } else if (toolName === 'list_documents') {
       desc = 'listing library';
+      srDesc = 'Listing library documents';
     } else if (toolName === 'get_document_summary' && input?.document_name) {
       desc = `opening: ${escHtml(input.document_name)}`;
+      srDesc = `Opening document: ${input.document_name}`;
+    } else {
+      desc = toolName;
+      srDesc = `Running tool: ${toolName}`;
     }
 
-    div.innerHTML = `<span class="tool-label">⚙</span>${desc}`;
+    div.innerHTML = `<span class="sr-only">${escHtml(srDesc)}</span><span class="tool-label" aria-hidden="true">⚙</span><span aria-hidden="true">${desc}</span>`;
     container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
+    maybeScrollChat(container);
     return div;
   }
 
   // === Documents panel ===
   async function loadDocs() {
+    const container = document.getElementById('docsList');
+    container.setAttribute('aria-busy', 'true');
     try {
       const data = await mcpToolCall('list_documents');
-      const container = document.getElementById('docsList');
 
       if (!data.documents || data.documents.length === 0) {
-        container.innerHTML = '<div class="empty-state">No documents found.</div>';
+        container.innerHTML = '<div class="empty-state" role="status"><span class="empty-icon" aria-hidden="true">📜</span>No documents found.</div>';
         return;
       }
 
-      let html = `<div class="results-info">${data.document_count} tomes in the library</div><div class="doc-list">`;
+      let html = `<p class="results-info" role="status">${data.document_count} tomes in the library</p><ul class="doc-list" style="list-style:none;padding:0;margin:0">`;
       for (const doc of data.documents) {
         const name = doc.document.replace(/\.pdf$/i, '').replace(/_/g, ' ');
         html += `
-          <div class="doc-item">
+          <li class="doc-item">
             <span class="doc-name">${escHtml(name)}</span>
-            <span class="doc-meta">${doc.chunks} chunks · ${doc.max_page} pages</span>
-          </div>`;
+            <span class="doc-meta"><span class="sr-only">Contains </span>${doc.chunks} chunks, ${doc.max_page} pages</span>
+          </li>`;
       }
-      html += '</div>';
+      html += '</ul>';
       container.innerHTML = html;
     } catch(e) {
-      document.getElementById('docsList').innerHTML =
-        `<div class="empty-state">Failed to load library: ${escHtml(e.message)}</div>`;
+      container.innerHTML = `<div class="empty-state" role="alert">Failed to load library: ${escHtml(e.message)}</div>`;
+    } finally {
+      container.setAttribute('aria-busy', 'false');
     }
   }
 
+  // === Mode switching (tablist with ARIA) ===
   function switchMode(mode, ev) {
-    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    // Update tabs
+    document.querySelectorAll('[role="tab"]').forEach(t => {
+      t.setAttribute('aria-selected', 'false');
+      t.setAttribute('tabindex', '-1');
+    });
+    const tab = document.getElementById(`tab-${mode}`);
+    tab.setAttribute('aria-selected', 'true');
+    tab.setAttribute('tabindex', '0');
+    tab.focus();
 
-    (ev?.target || ev?.currentTarget)?.classList.add('active');
-    document.getElementById(`panel-${mode}`).classList.add('active');
+    // Update panels
+    document.querySelectorAll('[role="tabpanel"]').forEach(p => {
+      p.classList.remove('active');
+      p.setAttribute('hidden', '');
+    });
+    const panel = document.getElementById(`panel-${mode}`);
+    panel.classList.add('active');
+    panel.removeAttribute('hidden');
 
     if (mode === 'docs') loadDocs();
-    if (mode === 'search') document.getElementById('searchInput').focus();
-    if (mode === 'chat') document.getElementById('chatInput').focus();
+    // Don't auto-focus inputs when tab was just activated — user can tab to them.
   }
+
+  // Arrow-key navigation for the tablist (WAI-ARIA Authoring Practices)
+  document.querySelectorAll('[role="tab"]').forEach(tab => {
+    tab.addEventListener('keydown', (e) => {
+      const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+      const idx = tabs.indexOf(e.currentTarget);
+      let target;
+      if (e.key === 'ArrowRight') target = tabs[(idx + 1) % tabs.length];
+      else if (e.key === 'ArrowLeft') target = tabs[(idx - 1 + tabs.length) % tabs.length];
+      else if (e.key === 'Home') target = tabs[0];
+      else if (e.key === 'End') target = tabs[tabs.length - 1];
+      if (target) {
+        e.preventDefault();
+        const mode = target.id.replace('tab-', '');
+        switchMode(mode);
+      }
+    });
+  });
 
   function escHtml(s) {
     if (typeof s !== 'string') return String(s);
