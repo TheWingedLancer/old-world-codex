@@ -5,6 +5,18 @@
       "allowedRoles": ["anonymous"]
     },
     {
+      "route": "/.git/*",
+      "statusCode": 404
+    },
+    {
+      "route": "/.svn/*",
+      "statusCode": 404
+    },
+    {
+      "route": "/.github/*",
+      "statusCode": 404
+    },
+    {
       "route": "/*",
       "allowedRoles": ["authenticated"]
     }
@@ -14,5 +26,17 @@
       "redirect": "/.auth/login/aad",
       "statusCode": 302
     }
+  },
+  "globalHeaders": {
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://login.microsoftonline.com",
+    "Cache-Control": "no-store, max-age=0"
+  },
+  "mimeTypes": {
+    ".json": "application/json"
   }
 }
