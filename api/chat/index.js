@@ -3,7 +3,7 @@
 // browser-based request forgery and limit Claude API budget abuse (ASVS V3.5).
 
 const ALLOWED_FETCH_SITES = new Set(['same-origin', 'none']);
-const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
 function reject(context, status, message) {
   context.res = {
